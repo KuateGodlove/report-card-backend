@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Stream {
+  SCIENCE
+  ARTS
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(false)
+
+  semesters Semester[]
+  classes   Class[]
+
+  createdAt DateTime @default(now())
+}
+
+model Semester {
+  id             String   @id @default(cuid())
+  name           String
+  order          Int
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  sequences         Sequence[]
+  semesterSummaries StudentSemesterSummary[]
+  classStats        ClassSemesterStats[]
+  semesterRecords   StudentSemesterRecord[]
+}
+
+model Sequence {
+  id         String   @id @default(cuid())
+  name       String
+  order      Int
+
+  semester   Semester @relation(fields: [semesterId], references: [id])
+  semesterId String
+
+  marks      Mark[]
+}
+
+model Class {
+  id             String  @id @default(cuid())
+  name           String
+  level          String
+  stream         Stream?
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  students           Student[]
+  classSubjects      ClassSubject[]
+  teacherAssignments TeacherAssignment[]
+  classStats         ClassSemesterStats[]
+}
+
+model Subject {
+  id                 String   @id @default(cuid())
+  name               String
+
+  classSubjects      ClassSubject[]
+  teacherAssignments TeacherAssignment[]
+  marks              Mark[]
+  semesterRecords    StudentSemesterRecord[]
+}
+
+model ClassSubject {
+  id           String @id @default(cuid())
+  coefficient  Float
+
+  class        Class   @relation(fields: [classId], references: [id])
+  classId      String
+
+  subject      Subject @relation(fields: [subjectId], references: [id])
+  subjectId    String
+
+  @@unique([classId, subjectId])
+}
+
+model Student {
+  id               String   @id @default(cuid())
+  fullName         String
+  matricule        String   @unique
+  gender           String
+  dateOfBirth      DateTime
+  placeOfBirth     String?
+  repeater         Boolean  @default(false)
+  regime           String?
+  photoUrl         String?
+  guardianContact  String?
+
+  class            Class    @relation(fields: [classId], references: [id])
+  classId          String
+
+  marks             Mark[]
+  semesterRecords   StudentSemesterRecord[]
+  semesterSummaries StudentSemesterSummary[]
+  account           StudentAccount?
+  parentLinks       ParentStudent[]
+
+  createdAt        DateTime @default(now())
+}
+
+model StudentAccount {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  studentId    String  @unique
+  student      Student @relation(fields: [studentId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model ParentAccount {
+  id           String          @id @default(cuid())
+  fullName     String
+  email        String          @unique
+  passwordHash String
+  children     ParentStudent[]
+  createdAt    DateTime        @default(now())
+}
+
+model ParentStudent {
+  parentId  String
+  studentId String
+
+  parent    ParentAccount @relation(fields: [parentId], references: [id])
+  student   Student      @relation(fields: [studentId], references: [id])
+
+  @@id([parentId, studentId])
+}
+
+model Teacher {
+  id             String   @id @default(cuid())
+  fullName       String
+  email          String   @unique
+  passwordHash   String
+  role           Role     @default(TEACHER)
+
+  assignments    TeacherAssignment[]
+  marksEntered   Mark[]   @relation("MarksEnteredBy")
+
+  createdAt      DateTime @default(now())
+}
+
+model TeacherAssignment {
+  id         String @id @default(cuid())
+
+  teacher    Teacher  @relation(fields: [teacherId], references: [id])
+  teacherId  String
+
+  subject    Subject  @relation(fields: [subjectId], references: [id])
+  subjectId  String
+
+  class      Class    @relation(fields: [classId], references: [id])
+  classId    String
+
+  @@unique([teacherId, subjectId, classId])
+}
+
+model Mark {
+  id           String  @id @default(cuid())
+  score        Float
+  isLocked     Boolean @default(false)
+
+  student      Student  @relation(fields: [studentId], references: [id])
+  studentId    String
+
+  subject      Subject  @relation(fields: [subjectId], references: [id])
+  subjectId    String
+
+  sequence     Sequence @relation(fields: [sequenceId], references: [id])
+  sequenceId   String
+
+  enteredBy    Teacher  @relation("MarksEnteredBy", fields: [teacherId], references: [id])
+  teacherId    String
+
+  editLogs     MarkEditLog[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([studentId, subjectId, sequenceId])
+}
+
+model MarkEditLog {
+  id          String   @id @default(cuid())
+
+  mark        Mark     @relation(fields: [markId], references: [id])
+  markId      String
+
+  oldScore    Float
+  newScore    Float
+  changedBy   String
+  changedAt   DateTime @default(now())
+}
+
+model StudentSemesterRecord {
+  id                     String @id @default(cuid())
+
+  student                Student  @relation(fields: [studentId], references: [id])
+  studentId              String
+
+  subject                Subject  @relation(fields: [subjectId], references: [id])
+  subjectId              String
+
+  semester               Semester @relation(fields: [semesterId], references: [id])
+  semesterId             String
+
+  semesterAverage        Float
+  totalWeighted          Float
+  grade                  String
+  classAverageForSubject Float
+  classMin               Float
+  classMax               Float
+  appreciation           String?
+
+  @@unique([studentId, subjectId, semesterId])
+}
+
+model StudentSemesterSummary {
+  id                       String @id @default(cuid())
+
+  student                  Student  @relation(fields: [studentId], references: [id])
+  studentId                String
+
+  semester                 Semester @relation(fields: [semesterId], references: [id])
+  semesterId               String
+
+  moyenneGenerale          Float
+  classRank                Int?
+  classSize                Int?
+  previousSemesterAverage  Float?
+  appreciationGenerale     String?
+  honorRoll                Boolean @default(false)
+  published                Boolean @default(false)
+
+  absencesJustifiees       String?
+  absencesNonJustifiees    Int?
+  retards                  Int?
+  conduite                 String?
+  tenuePonctualite         String?
+  travailMaison            String?
+  observationConseil       String?
+  classTeacherName         String?
+
+  @@unique([studentId, semesterId])
+}
+
+model ClassSemesterStats {
+  id                     String @id @default(cuid())
+
+  class                  Class    @relation(fields: [classId], references: [id])
+  classId                String
+
+  semester               Semester @relation(fields: [semesterId], references: [id])
+  semesterId             String
+
+  classAverage           Float
+  numberAdmitted         Int
+  numberRepeaters        Int
+  numberHonorRoll        Int
+  highestAverage         Float
+  highestAverageStudent  String?
+  lowestAverage          Float
+  lowestAverageStudent   String?
+  successRate            Float
+  standardDeviation      Float
+
+  @@unique([classId, semesterId])
+}
